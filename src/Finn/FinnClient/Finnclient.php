@@ -106,11 +106,9 @@ class FinnClient
 			$work = null;
 			$mobile = null;
 			$fax = null;
-			$email = null;
 			foreach($entry->children($ns['finn'])->contact as $contact) {
 				$name = (string) $contact->children()->name;
 				$title = (string) $contact->attributes()->title;
-				$email = (string) $contact->children()->email;
 				foreach($contact->{'phone-number'} as $numbers) {
 					switch($numbers->attributes()) {
 						case 'work':
@@ -126,7 +124,6 @@ class FinnClient
 				}
 				array_push($contacts, array(
 					'name' => $name,
-					'email' => $email,
 					'title' => $title,
 					'work' => $work,
 					'mobile' => $mobile,
@@ -232,9 +229,13 @@ class FinnClient
 			$sharedCost = "";
 			$estimatedValue = "";
 			$sqmPrice = "";
+			$mainPriceFrom = "";
+			$mainPriceTo = "";
 			foreach ($adata->children($ns['finn'])->price as $price) {
 				if ($price->attributes()->name == 'main') {
 					$mainPrice = $price->attributes()->value;
+					$mainPriceFrom = $price->attributes()->from;
+					$mainPriceTo = $price->attributes()->to;
 				}
 				if ($price->attributes()->name == 'total') {
 					$totalPrice = $price->attributes()->value;
@@ -253,12 +254,16 @@ class FinnClient
 				}
 			}
 			$property->mainPrice = (string)$mainPrice;
+			$property->mainPriceFrom = (string)$mainPriceFrom;
+			$property->mainPriceTo = (string)$mainPriceTo;
 			$property->totalPrice = (string)$totalPrice;
 			$property->collectiveDebt = (string)$collectiveDebt;
 			$property->sharedCost = (string)$sharedCost;
 			$property->estimatedValue = (string)$estimatedValue;
 			$property->sqmPrice = (string)$sqmPrice;
+			
 		
+			
             return $property;
 	}
 	
