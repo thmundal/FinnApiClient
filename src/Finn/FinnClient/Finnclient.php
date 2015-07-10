@@ -42,7 +42,8 @@ class FinnClient
 	{
 		$url = $this->apiUrl.'ad/'.$type.'/'.$finncode;
 		$rawData = $this->restClient->send($url);
-		
+		$this->rawData = $rawData;
+        
 		//parse dataene til array med objekter
 		if(isset($rawData)){
 			$entry = new \SimpleXMLElement($rawData);
@@ -61,210 +62,140 @@ class FinnClient
 	{		
 		$property = new Property();
 			
-			$property->id = (string)$entry->children($ns['dc'])->identifier;
-			$property->title = (string)$entry->title;
-			$property->updated = (string)$entry->updated;
-			$property->published = (string)$entry->published;
-		  
-		    $links = array();
-            foreach ($entry->link as $link) {
-                $rel = $link->attributes()->rel;
-                $ref = $link->attributes()->href;
-                $links["$rel"] = "$ref";
+        $property->id = (string)$entry->children($ns['dc'])->identifier;
+        $property->title = (string)$entry->title;
+        $property->updated = (string)$entry->updated;
+        $property->published = (string)$entry->published;
+      
+        $links = array();
+        foreach ($entry->link as $link) {
+            $rel = $link->attributes()->rel;
+            $ref = $link->attributes()->href;
+            $links["$rel"] = "$ref";
+        }
+        $property->links = $links;
+      
+        $isPrivate = "false";
+        $status = "";
+        $adType = "";
+        foreach ($entry->category as $category) {
+          if ($category->attributes()->scheme =="urn:finn:ad:private"){
+            $isPrivate = $category->attributes()->term;
+          }
+          //if disposed == true, show the label
+          if ($category->attributes()->scheme =="urn:finn:ad:disposed"){
+            if($category->attributes()->term == "true"){
+              $status = $category->attributes()->label;
             }
-            $property->links = $links;
-		  
-			$isPrivate = "false";
-			$status = "";
-			$adType = "";
-			foreach ($entry->category as $category) {
-			  if ($category->attributes()->scheme =="urn:finn:ad:private"){
-				$isPrivate = $category->attributes()->term;
-			  }
-			  //if disposed == true, show the label
-			  if ($category->attributes()->scheme =="urn:finn:ad:disposed"){
-				if($category->attributes()->term == "true"){
-				  $status = $category->attributes()->label;
-				}
-			  }
-			  if ($category->attributes()->scheme =="urn:finn:ad:type"){
-				$adType = $category->attributes()->label;
-			  }
-			}
-			
-			$property->isPrivate = (string)$isPrivate;
-			$property->status = (string)$status;
-			$property->adType = (string)$adType;
-			
-			$property->georss = (string)$entry->children($ns['georss'])->point;
-			$location = $entry->children($ns['finn'])->location;
-			$property->city = (string)$location->children($ns['finn'])->city;
-			$property->address = (string)$location->children($ns['finn'])->address;
-			$property->postalCode = (string)$location->children($ns['finn'])->{'postal-code'};
-			
-			$contacts = array();
-			$work = null;
-			$mobile = null;
-			$fax = null;
-			foreach($entry->children($ns['finn'])->contact as $contact) {
-				$name = (string) $contact->children()->name;
-				$title = (string) $contact->attributes()->title;
-				foreach($contact->{'phone-number'} as $numbers) {
-					switch($numbers->attributes()) {
-						case 'work':
-							$work = (string) $numbers;
-							break;
-						case 'mobile':
-							$mobile = (string) $numbers;
-							break;
-						case 'fax':
-							$fax = (string) $numbers;
-							break;
-					}
-				}
-				array_push($contacts, array(
-					'name' => $name,
-					'title' => $title,
-					'work' => $work,
-					'mobile' => $mobile,
-					'fax' => $fax
-				));
-			}
-			$property->contacts = $contacts;
-			
-			$img = array();
-			if ($entry->children($ns['media']) && $entry->children($ns['media'])->content->attributes()) {
-				//$img = $entry->children($ns['media'])->content->attributes();
-				foreach($entry->children($ns['media'])->content as $content) {
-					$img[] = current($content->attributes());
-				}
-			}
-			$property->img = $img;
-		
-			$property->author = (string)$entry->author->name;
-		
-			$adata = $entry->children($ns['finn'])->adata;
-			$livingSizeFrom = 0;
-			$livingSizeTo = 0;
-			$propertyType = "";
-			$numberOfBedrooms = 0;
-			$ownershipType = "";
-			$usableSize = "";
-			$primarySize = "";
-			$ingress = "";
-			$situation = "";
-			$facilities = array();
-			$generalText = array();
-			foreach ($adata->children($ns['finn'])->field as $field) {
-				if ($field->attributes()->name == 'no_of_bedrooms') {
-					$numberOfBedrooms = $field->attributes()->value;
-				}
-				if ($field->attributes()->name == 'property_type') {
-					$propertyType = $field->children($ns['finn'])->value;
-				}
-				if ($field->attributes()->name == 'ownership_type') {
-					$ownershipType = $field->attributes()->value;
-				}
-				if ($field->attributes()->name == 'size') {
-					foreach ($field->children($ns['finn'])->field as $sizeField) {
-						if ($sizeField->attributes()->name == "usable") {
-							$usableSize = $sizeField->attributes()->value;
-						}
-						if ($sizeField->attributes()->name == "primary") {
-							$primarySize = $sizeField->attributes()->value;
-						}
-						$livingSizeFrom = $sizeField->attributes()->from;
-						$livingSizeTo = $sizeField->attributes()->to;
-					}
-				}
-				
-				if($field->attributes()->name == 'facilities') {
-					foreach($field->children($ns['finn'])->value as $facility) {
-						$facilities[] = (string)$facility;
-					}
-				}
-				
-				if($field->attributes()->name == 'general_text') {
-					$i = 0;
-					foreach($field->children($ns['finn'])->value as $text) {
-						
-						foreach($text->children($ns['finn'])->field as $t) {
-							if($t->attributes()->name == "title") {
-								$generalText[$i]['title'] = (string)$t->attributes()->value;
-							}
-							if($t->attributes()->name == "value") {
-								$generalText[$i]['value'] = (string)$t;
-							}
-						}
-						$i++;
-					}
-				}
-				if($field->attributes()->name == 'ingress') {
-					$ingress = (string)$field;
-				}
-				if($field->attributes()->name == 'situation') {
-					$situation = (string)$field;
-				}
-			}
-
-			$property->ingress = $ingress;
-			$property->situation = $situation;
-			$property->facilities = $facilities;
-			$property->generalText = $generalText;
-			$property->livingSizeFrom = (string)$livingSizeFrom;
-			$property->livingSizeTo = (string)$livingSizeTo;
-			$property->propertyType = (string)$propertyType;
-			$property->numberOfBedrooms = (string)$numberOfBedrooms;
-			$property->ownershipType = (string)$ownershipType;
-			$property->usableSize = (string)$usableSize;
-			$property->primarySize = (string)$primarySize;
-		
-			
-			
-		
-		
-			$mainPrice = "";
-			$totalPrice = "";
-			$collectiveDebt = "";
-			$sharedCost = "";
-			$estimatedValue = "";
-			$sqmPrice = "";
-			$mainPriceFrom = "";
-			$mainPriceTo = "";
-			foreach ($adata->children($ns['finn'])->price as $price) {
-				if ($price->attributes()->name == 'main') {
-					$mainPrice = $price->attributes()->value;
-					$mainPriceFrom = $price->attributes()->from;
-					$mainPriceTo = $price->attributes()->to;
-				}
-				if ($price->attributes()->name == 'total') {
-					$totalPrice = $price->attributes()->value;
-				}
-				if ($price->attributes()->name == 'collective_debt') {
-					$collectiveDebt = $price->attributes()->value;
-				}
-				if ($price->attributes()->name == 'shared_cost') {
-					$sharedCost = $price->attributes()->value;
-				}
-				if ($price->attributes()->name == 'estimated_value') {
-					$estimatedValue = $price->attributes()->value;
-				}
-				if ($price->attributes()->name == 'square_meter') {
-					$sqmPrice = $price->attributes()->value;
-				}
-			}
-			$property->mainPrice = (string)$mainPrice;
-			$property->mainPriceFrom = (string)$mainPriceFrom;
-			$property->mainPriceTo = (string)$mainPriceTo;
-			$property->totalPrice = (string)$totalPrice;
-			$property->collectiveDebt = (string)$collectiveDebt;
-			$property->sharedCost = (string)$sharedCost;
-			$property->estimatedValue = (string)$estimatedValue;
-			$property->sqmPrice = (string)$sqmPrice;
-			
-		
-			
-            return $property;
+          }
+          if ($category->attributes()->scheme =="urn:finn:ad:type"){
+            $adType = $category->attributes()->label;
+          }
+        }
+        
+        $property->isPrivate = (string)$isPrivate;
+        $property->status = (string)$status;
+        $property->adType = (string)$adType;
+        
+        $property->georss = (string)$entry->children($ns['georss'])->point;
+        $location = $entry->children($ns['finn'])->location;
+        $property->city = (string)$location->children($ns['finn'])->city;
+        $property->address = (string)$location->children($ns['finn'])->address;
+        $property->postalCode = (string)$location->children($ns['finn'])->{'postal-code'};
+        
+        $contacts = array();
+        $work = null;
+        $mobile = null;
+        $fax = null;
+        foreach($entry->children($ns['finn'])->contact as $contact) {
+            $name = (string) $contact->children()->name;
+            $title = (string) $contact->attributes()->title;
+            foreach($contact->{'phone-number'} as $numbers) {
+                switch($numbers->attributes()) {
+                    case 'work':
+                        $work = (string) $numbers;
+                        break;
+                    case 'mobile':
+                        $mobile = (string) $numbers;
+                        break;
+                    case 'fax':
+                        $fax = (string) $numbers;
+                        break;
+                }
+            }
+            array_push($contacts, array(
+                'name' => $name,
+                'title' => $title,
+                'work' => $work,
+                'mobile' => $mobile,
+                'fax' => $fax
+            ));
+        }
+        $property->contacts = $contacts;
+        
+        $img = array();
+        if ($entry->children($ns['media']) && $entry->children($ns['media'])->content->attributes()) {
+            //$img = $entry->children($ns['media'])->content->attributes();
+            foreach($entry->children($ns['media'])->content as $content) {
+                $img[] = current($content->attributes());
+            }
+        }
+        $property->img = $img;
+    
+        $property->author = (string)$entry->author->name;
+        $adata = $entry->children($ns['finn'])->adata;
+    
+        $property->price = [];
+        foreach ($adata->children($ns['finn'])->price as $price) {
+            $out = (string)$price->attributes()->value;
+            if ($price->attributes()->name == 'main') {
+                $mainPrice = (string)$price->attributes()->value;
+                $mainPriceFrom = (string)$price->attributes()->from;
+                $mainPriceTo = (string)$price->attributes()->to;
+                
+                $out = ["price" => $mainPrice, "from" => $mainPriceFrom, "to" => $mainPriceTo];
+            }
+            $property->price[(string)$price->attributes()->name] = $out;
+        }
+        
+        // Do a propert recursive parse of the XML tree
+        // TODO: Move this up the chain so we dont need the hardcoded stuff above here
+        function traverseChildTree($parent, $out) {
+            global $ns;
+            if($parent->count() > 0) {
+                foreach($parent as $field) {
+                    $attributes = $field->attributes();
+                    $fields = $field->field;
+                        
+                    // If there are no attributes, skip to next entry
+                    if(empty($attributes)) continue;
+                    
+                    // IF the field has no attribute value, but instead a list of children containing the values (finn:value)
+                    if(!$attributes->value OR is_null($attributes->value)) {
+                        if($field->count() > 0) {
+                            $out->{$attributes->name} = [];
+                            foreach($field->value as $v) {
+                                $out->{(string)$attributes->name}[] = (string)$v;
+                            }
+                        }
+                    } else {
+                        // If the field has attribute values, then go ahead and set those
+                        // Set the property to the value ($out context)
+                        $out->{(string)$attributes->name} = (string)$attributes->value;
+                    }
+                    
+                    // Check if there are children of this node and then loop trough those recursively
+                    if($field->children($ns['finn'])->field->count() > 0) {
+                        $inner = new Property();
+                        traverseChildTree($field->children($ns['finn'])->field, $inner);
+                        $out->children = $inner;
+                    }
+                }
+            }
+        }
+        
+        traverseChildTree($adata->children($ns['finn'])->field, $property);
+        return $property;
 	}
 	
 	//Returns an array of objects
